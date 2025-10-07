@@ -50,7 +50,7 @@ def handle_message(message):
 
 while True:
     try:
-        bot.infinity_polling()
+        bot.infinity_polling(timeout=60, long_polling_timeout=60)
     except Exception as e:
         print(f"[!] Ошибка: {e}, перезапуск через 5 сек...")
         time.sleep(5)
