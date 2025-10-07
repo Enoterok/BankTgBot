@@ -1,0 +1,21 @@
+# Логи
+*.log
+logs/
+log_*.txt
+
+# Базы данных
+*.db
+database/
+data/
+*.sqlite
+*.sqlite3
+
+# Python кэш
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Виртуальное окружение
+venv/
+env/

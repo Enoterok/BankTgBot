@@ -30,4 +30,5 @@
 
 1. Клонируйте репозиторий:
 ```bash
+pip install pyTelegramBotAPI
 git clone https://github.com/UnityUI008/BankTgBot/
