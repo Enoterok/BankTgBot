@@ -10,9 +10,12 @@ import sys
 
 bot = telebot.TeleBot(info.TOKEN)
 
-DB_PATH = 'db.json'
-TRANS_LOG = 'transLog.log'
-FEEDBACK_LOG = 'feedback.log'
+DB_PATH = 'db/db.json'
+TRANS_LOG = 'logs/transLog.log'
+FEEDBACK_LOG = 'logs/feedback.log'
+
+HOLD_LIMIT = 10000
+HOLD_TIME = 3600  # 1 час
 
 def is_admin(Uid):
     return Uid in info.ADMIN_ID
@@ -76,8 +79,15 @@ class CommandsInclude:
                 json.dump({'users': {}}, f, ensure_ascii=False, indent=2)
 
     def _load_db(self):
-        with open(self.db_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+        try:
+            with open(self.db_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if not content:
+                    return {'users': {}}
+                return json.loads(content)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return {'users': {}}
+
 
     def _save_db(self, data):
         tmp = self.db_path + '.tmp'
@@ -129,7 +139,8 @@ class CommandsInclude:
                     'main': {
                         'balance': 0.0,
                         'acc_number': acc_number,
-                        'blocked': False
+                        'blocked': False,
+                        'pending': []
                     }
                 }
             }
@@ -145,20 +156,30 @@ class CommandsInclude:
             lines = []
             for name, data in user['accounts'].items():
                 status = "🚫 Заблокирован" if data.get('blocked') else "✅ Активен"
-                lines.append(f"💳 {name} - {data['acc_number']}: {data['balance']} | {status}")
+                pending_sum = sum(
+                    p['amount'] for p in data.get('pending', [])
+                )
+                lines.append(
+                    f"💳 {name} - {data['acc_number']}\n"
+                    f"💰 Баланс: {data['balance']}\n"
+                    f"⏳ В удержании: {pending_sum}\n"
+                    f"{status}"
+                )
         return "\n".join(lines)
 
     def transfer(self, message):
         parts = message.text.split(maxsplit=4)
         if len(parts) < 4:
             return "Использование: /transfer <откуда> <сумма> <куда> [комментарий]"
+
         from_acc = parts[1].strip()
+
         try:
             amount = float(parts[2])
         except ValueError:
             return "❌ Сумма должна быть числом."
 
-        # Проверки суммы
+        # 🔒 Проверки суммы
         if amount <= 0:
             return "❌ Сумма перевода должна быть положительным числом."
         if amount > 1_000_000:
@@ -172,46 +193,90 @@ class CommandsInclude:
             sender = self._get_user(sender_id)
             if not sender:
                 return "Вы не зарегистрированы. Введите /register"
+
             if from_acc not in sender['accounts']:
                 return f"Счёт '{from_acc}' не найден."
+
             if sender['accounts'][from_acc].get('blocked'):
                 return f"🚫 Счёт '{from_acc}' заблокирован."
+
             if sender['accounts'][from_acc]['balance'] < amount:
                 return "❌ Недостаточно средств."
 
             # 🔁 Перевод между своими счетами
-            if not target.startswith("ACC-"):
+            if not target.startswith("ACC-") and not target.startswith("@"):
                 if target not in sender['accounts']:
                     return f"Счёт '{target}' не найден среди ваших."
                 if from_acc == target:
                     return "❌ Нельзя переводить самому себе на тот же счёт."
                 if sender['accounts'][target].get('blocked'):
                     return f"🚫 Целевой счёт '{target}' заблокирован."
+
                 sender['accounts'][from_acc]['balance'] -= amount
                 sender['accounts'][target]['balance'] += amount
                 self._save_user(sender_id, sender)
-                self._log_transaction(f"SELF_TRANSFER | {sender_id}:{from_acc}->{target} | {amount} | {comment}")
-                return f"✅ Переведено {amount} с '{from_acc}' на '{target}' (свой счёт)\n💬 {comment or 'Без комментария'}"
+                self._log_transaction(
+                    f"SELF_TRANSFER | {sender_id}:{from_acc}->{target} | {amount} | {comment}"
+                )
+                return (
+                    f"✅ Переведено {amount} с '{from_acc}' на '{target}' (свой счёт)\n"
+                    f"💬 {comment or 'Без комментария'}"
+                )
 
-            # 🎯 Перевод на чужой счёт
-            target_id, target_acc = self._find_user_by_acc_number(target)
-            if not target_id:
-                return "❌ Целевой счёт не найден."
-            recipient = self._get_user(target_id)
-            if recipient['accounts'][target_acc].get('blocked'):
-                return f"🚫 Целевой счёт {target} заблокирован."
 
+            
+            # 👤 Перевод по username (@username → main)
+            if target.startswith("@"):
+                target_id = self._find_user_by_username(target)
+
+                if target_id == "AMBIGUOUS":
+                    return (
+                        "❌ Найдено несколько пользователей с таким username.\n"
+                        "➡️ Используйте номер счёта (ACC-XXXXXX)."
+                    )
+
+                if not target_id:
+                    return "❌ Пользователь не найден."
+
+                if target_id == sender_id:
+                    return "❌ Используйте имя счёта (main / sub1) для перевода между своими счетами."
+                
+                recipient = self._get_user(target_id)
+                target_acc = "main"
+
+                if target_acc not in recipient['accounts']:
+                    return "❌ У получателя нет основного счёта."
+
+                if recipient['accounts'][target_acc].get('blocked'):
+                    return "🚫 Счёт получателя заблокирован."
+
+            # 🎯 Перевод по ACC-номеру
+            else:
+                target_id, target_acc = self._find_user_by_acc_number(target)
+                if not target_id:
+                    return "❌ Целевой счёт не найден."
+
+                recipient = self._get_user(target_id)
+                if recipient['accounts'][target_acc].get('blocked'):
+                    return f"🚫 Целевой счёт {target} заблокирован."
+
+            # 💸 Списание / зачисление
             sender['accounts'][from_acc]['balance'] -= amount
             recipient['accounts'][target_acc]['balance'] += amount
+
             self._save_user(sender_id, sender)
             self._save_user(target_id, recipient)
-            self._log_transaction(f"TRANSFER | from:{sender_id}/{from_acc} -> to:{target_id}/{target_acc} | {amount} | {comment}")
-            
+
+            self._log_transaction(
+                f"TRANSFER | from:{sender_id}/{from_acc} -> to:{target_id}/{target_acc} | {amount} | {comment}"
+            )
+
             # ✉️ Уведомление получателю
             try:
                 bot.send_message(
                     target_id,
-                    f"📩 Вам поступил перевод {amount} от пользователя {sender_id}\n💬 {comment or 'Без комментария'}"
+                    f"📩 Вам поступил перевод {amount} от пользователя {sender_id}\n"
+                    f"💬 {comment or 'Без комментария'}"
                 )
             except Exception as e:
                 print(f"[!] Не удалось отправить уведомление: {e}")
@@ -253,6 +318,25 @@ class CommandsInclude:
 
     def myid(self, message):
         return f"Ваш Telegram ID: {message.from_user.id}"
+    
+    def _find_user_by_username(self, username):
+        db = self._load_db()
+        username = username.lstrip('@').lower()
+
+        matches = []
+
+        for uid, u in db.get('users', {}).items():
+            if u.get('username', '').lower() == username:
+                matches.append(int(uid))
+
+        if len(matches) == 1:
+            return matches[0]
+
+        if len(matches) > 1:
+            return "AMBIGUOUS"  # ⚠️ неоднозначно
+
+        return None
+
 
     # ====== Админ-команды ======
     def stats(self, message):

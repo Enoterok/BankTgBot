@@ -5,6 +5,7 @@ log_*.txt
 
 # Базы данных
 *.db
+db/
 database/
 data/
 *.sqlite

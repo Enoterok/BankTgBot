@@ -10,7 +10,7 @@ bot = telebot.TeleBot(info.TOKEN)
 commandsExpl = comands.CommandsInclude()
 
 def loging(message, response):
-    with open('logs.log', 'a', encoding='utf-8') as f:
+    with open('logs/logs.log', 'a', encoding='utf-8') as f:
         f.write(f"[{datetime.now()}] {message.from_user.id} ({message.from_user.username}): {message.text}\n")
         f.write(f"Bot: {response}\n\n")
 
