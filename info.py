@@ -1,3 +1,4 @@
+# info.py
 TOKEN = '***REMOVED***'
 
 ADMIN_ID = [6120496361]
