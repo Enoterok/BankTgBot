@@ -4,6 +4,7 @@ logs/
 log_*.txt
 
 # Базы данных
+info*
 info.py
 *.db
 db/

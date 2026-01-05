@@ -1,4 +1,4 @@
-# comands.py
+# comand.py
 import telebot
 import info
 import os
@@ -79,7 +79,22 @@ class CommandsInclude:
             with open(self.db_path, 'w', encoding='utf-8') as f:
                 json.dump({'users': {}}, f, ensure_ascii=False, indent=2)
 
-    
+    def _load_db(self):
+        try:
+            with open(self.db_path, 'r', encoding='utf-8') as f:
+                content = f.read().strip()
+                if not content:
+                    return {'users': {}}
+                return json.loads(content)
+        except (json.JSONDecodeError, FileNotFoundError):
+            return {'users': {}}
+
+
+    def _save_db(self, data):
+        tmp = self.db_path + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, self.db_path)
 
     def _get_user(self, user_id):
         db = self._load_db()

@@ -1,74 +1,158 @@
 import asyncio
-import logging
-
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message
+from aiogram.exceptions import TelegramBadRequest
+from aiogram import Bot, Dispatcher, Router, F, types
 from aiogram.filters import Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-import info
-from comands import CommandsInclude
+from core import moneyOP as op
+from core import sqlite as db
+from info import TOKEN
 
-# =====================================
+# ======================
+# FSM
+# ======================
+class TransferFSM(StatesGroup):
+    to_acc = State()
+    amount = State()
 
-logging.basicConfig(level=logging.INFO)
 
-bot = Bot(token=info.TOKEN)
-dp = Dispatcher()
+router = Router()
 
-core = CommandsInclude()  # твоя логика
 
-# =====================================
-# START / LIST
-# =====================================
+# ======================
+# KEYBOARDS
+# ======================
+def main_menu():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="💰 Баланс", callback_data="balance")
+    kb.button(text="💸 Перевод", callback_data="transfer")
+    kb.adjust(1)
+    return kb.as_markup()
 
-@dp.message(Command("start"))
-async def start(message: Message):
-    await message.answer(
-        "Добро пожаловать!\n"
-        "Используйте /register для создания аккаунта\n"
-        "/list — список команд"
+
+# ======================
+# START
+# ======================
+@router.message(Command("start"))
+async def start_cmd(message: types.Message):
+    status, detail = op.register(
+        message.from_user.id,
+        message.from_user.username or "unknown"
     )
 
-
-@dp.message(Command("list"))
-async def cmd_list(message: Message):
-    if core and message.from_user.id in info.ADMIN_ID:
-        await message.answer(
-            core.command_list_user + core.command_list_admin
-        )
-    else:
-        await message.answer(core.command_list_user)
-
-# =====================================
-# Роутер команд
-# =====================================
-
-@dp.message(F.text.startswith("/"))
-async def command_router(message: Message):
-    cmd = message.text.split()[0][1:].split("@")[0]
-    func = core.functions.get(cmd)
-
-    if not func:
-        await message.answer("❌ Неизвестная команда")
+    if status != op.MONEY_OK:
+        await message.answer(f"❌ Ошибка регистрации: {status}")
         return
 
+    text = "👋 С возвращением!" if detail == "already_registered" else "🏦 Добро пожаловать в банк!"
+    await message.answer(text, reply_markup=main_menu())
+
+
+# ======================
+# BALANCE
+# ======================
+@router.callback_query(F.data == "balance")
+async def balance_cb(cb: types.CallbackQuery):
+    err, accounts = db.get_accounts_by_user(cb.from_user.id)
+    if err != db.SQL_OK:
+        await cb.answer(f"Ошибка БД: {err}", show_alert=True)
+        return
+
+    lines = []
+    for acc in accounts:
+        lines.append(
+            f"💳 <b>{acc['name']}</b>\n"
+            f"{acc['acc_number']}\n"
+            f"Баланс: {acc['balance']}\n"
+            f"В удержании: {acc['pending']}\n"
+        )
+        
     try:
-        # ⚠️ core у тебя синхронный → выносим в thread
-        response = await asyncio.to_thread(func, message)
+        await cb.message.edit_text(
+            "\n".join(lines),
+            reply_markup=main_menu(),
+            parse_mode="HTML"
+        )
+        await cb.answer()
+    except TelegramBadRequest:
+        await cb.answer("Баланс уже актуальный")
 
-        if response:
-            await message.answer(response)
+    
 
-    except Exception as e:
-        logging.exception("Ошибка обработки команды")
-        await message.answer("⚠️ Внутренняя ошибка. Администратор уведомлён.")
 
-# =====================================
-# Запуск
-# =====================================
+# ======================
+# TRANSFER START
+# ======================
+@router.callback_query(F.data == "transfer")
+async def transfer_start(cb: types.CallbackQuery, state: FSMContext):
+    await state.set_state(TransferFSM.to_acc)
+    await cb.message.answer("Введите номер счёта получателя (ACC-XXXX):")
+    await cb.answer()
 
+
+# ======================
+# TRANSFER TO_ACC
+# ======================
+@router.message(TransferFSM.to_acc)
+async def transfer_to_acc(message: types.Message, state: FSMContext):
+    if not message.text.startswith("ACC-"):
+        await message.answer("❌ Неверный формат счёта.")
+        return
+
+    await state.update_data(to_acc=message.text.strip())
+    await state.set_state(TransferFSM.amount)
+    await message.answer("Введите сумму перевода:")
+
+
+# ======================
+# TRANSFER AMOUNT
+# ======================
+@router.message(TransferFSM.amount)
+async def transfer_amount(message: types.Message, state: FSMContext):
+    try:
+        amount = float(message.text)
+        if amount <= 0:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Введите корректную сумму.")
+        return
+
+    data = await state.get_data()
+    to_acc = data["to_acc"]
+
+    err, from_acc = db.get_main_account(message.from_user.id)
+    if err != db.SQL_OK:
+        await message.answer(f"Ошибка БД: {err}")
+        await state.clear()
+        return
+
+    status, detail = op.transfer(from_acc["acc_number"], to_acc, amount)
+
+    if status == op.MONEY_OK:
+        await message.answer("✅ Перевод выполнен.", reply_markup=main_menu())
+    else:
+        await message.answer(f"❌ Ошибка: {status}")
+
+    await state.clear()
+
+
+# ======================
+# RUN
+# ======================
 async def main():
+    err, detail = db.init_db()
+    if err != db.SQL_OK:
+        print(f"DB INIT ERROR: {err}", detail)
+        return
+
+    bot = Bot(TOKEN)
+    dp = Dispatcher()
+    dp.include_router(router)
+
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
