@@ -11,7 +11,7 @@ MONEY_ACC_NOT_FOUND = errors.MONEY_ACC_NOT_FOUND
 MONEY_BLOCKED = errors.MONEY_BLOCKED
 MONEY_NO_FUNDS = errors.MONEY_NO_FUNDS
 MONEY_BAD_AMOUNT = errors.MONEY_BAD_AMOUNT
-
+MONEY_INTERNAL_ERROR = errors.MONEY_INTERNAL_ERROR
 
 # ======================
 # INTERNAL UTILS
@@ -63,11 +63,32 @@ def get_balance(acc_number: str):
 # TRANSFER
 # ======================
 def transfer(from_acc: str, to_acc: str, amount: float):
-    if amount <= 0: return MONEY_BAD_AMOUNT, None
+    if amount <= 0: 
+        return MONEY_BAD_AMOUNT, None
     
-    try:
-        db.transfer(from_acc, to_acc, amount)
-    except Exception as e:
-        return "Unknow error", e
-
+    # Получаем информацию о счете отправителя
+    err, from_account = db.get_account_by_acc(from_acc)
+    if err_check(err, from_account):
+        return err, None
+    if from_account.get("blocked"):
+        return MONEY_BLOCKED, "Sender account is blocked"
+    
+    # Получаем информацию о счете получателя
+    err, to_account = db.get_account_by_acc(to_acc)
+    if err_check(err, to_account):
+        return err, None
+    if to_account.get("blocked"):
+        return MONEY_BLOCKED, "Recipient account is blocked"
+    
+    # Проверяем достаточность средств
+    if from_account.get("balance", 0) < amount:
+        return MONEY_NO_FUNDS, "Insufficient funds"
+    
+    # Выполняем перевод
+    err, result = db.transfer(from_account["id"], to_account["id"], amount)
+    
+    # Передаем ошибку из sqlite.py без изменений
+    if err != db.SQL_OK:
+        return err, result
+    
     return MONEY_OK, None
