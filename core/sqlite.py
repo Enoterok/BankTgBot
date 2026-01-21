@@ -712,3 +712,47 @@ def check_pending_rule(target_acc: str):
         return SQL_INTERNAL_ERROR, str(e)
     finally:
         conn.close()
+
+def add_to_pending(account_id: int, amount: float):
+    """Добавление суммы к pending счету"""
+    conn = _connect()
+    if not conn: return SQL_CONN_ERROR, None
+    
+    try:
+        conn.execute(
+            "UPDATE accounts SET pending = pending + ? WHERE id = ?",
+            (amount, account_id)
+        )
+        conn.commit()
+        return SQL_OK, None
+    except Exception as e:
+        return SQL_INTERNAL_ERROR, str(e)
+    finally:
+        conn.close()
+
+
+def get_account_by_name_and_user(account_name: str, user_id: int):
+    """Получение счета по имени и ID пользователя"""
+    conn = _connect()
+    if not conn: return SQL_CONN_ERROR, None
+    
+    try:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT id, user_id, name, acc_number, balance, pending, blocked
+            FROM accounts WHERE name = ? AND user_id = ?
+        """, (account_name, user_id))
+        row = cur.fetchone()
+        if not row:
+            return SQL_NOT_FOUND, None
+        return SQL_OK, {
+            "id": row[0],
+            "user_id": row[1],
+            "name": row[2],
+            "acc_number": row[3],
+            "balance": row[4],
+            "pending": row[5],
+            "blocked": bool(row[6])
+        }
+    finally:
+        conn.close()

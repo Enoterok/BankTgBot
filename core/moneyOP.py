@@ -12,19 +12,11 @@ MONEY_BLOCKED = errors.MONEY_BLOCKED
 MONEY_NO_FUNDS = errors.MONEY_NO_FUNDS
 MONEY_BAD_AMOUNT = errors.MONEY_BAD_AMOUNT
 MONEY_INTERNAL_ERROR = errors.MONEY_INTERNAL_ERROR
+MONEY_PENDING_TRANSFER = "MONEY_PENDING_TRANSFER"  # Новый код для pending перевода
 
 # ======================
 # INTERNAL UTILS
 # ======================
-
-def is_user_blocked(user_id: int):
-    """Проверка, заблокирован ли пользователь"""
-    err, user = db.get_user(user_id)
-    if err != db.SQL_OK:
-        return False  # Не нашли пользователя или ошибка
-    return user.get("blocked", False)
-
-
 def _gen_acc():
     return f"ACC-{random.randint(100000000, 999999999)}"
 
@@ -39,24 +31,37 @@ def err_check(err, data=None):
 
 
 # ======================
+# USER BLOCK CHECK
+# ======================
+def is_user_blocked(user_id: int):
+    """Проверка, заблокирован ли пользователь"""
+    err, user = db.get_user_by_id(user_id)
+    if err != db.SQL_OK:
+        return False  # Не нашли пользователя или ошибка
+    return user.get("blocked", False)
+
+
+# ======================
 # REGISTRATION
 # ======================
 def register(user_id: int, username: str):
     err, _ = db.create_user(user_id, username)
 
     # пользователь уже существует — это допустимо
-    if err == db.SQL_ALREADY_EXISTS: 
+    if err == db.SQL_ALREADY_EXISTS:
         # Проверяем, не заблокирован ли пользователь
         if is_user_blocked(user_id):
             return MONEY_BLOCKED, "User is blocked"
         return MONEY_OK, "already_registered"
     
-    if err_check(err, True): return err, None
+    if err_check(err, True): 
+        return err, None
 
     acc = _gen_acc()
     err, _ = db.create_account(user_id, "main", acc)
 
-    if err_check(err, True): return err, None
+    if err_check(err, True): 
+        return err, None
 
     return MONEY_OK, acc
 
@@ -67,8 +72,10 @@ def register(user_id: int, username: str):
 def get_balance(acc_number: str):
     err, acc = db.get_account_by_acc(acc_number)
 
-    if err_check(err, acc): return err, None
-    if acc.get("blocked"): return MONEY_BLOCKED, "Get blocked"
+    if err_check(err, acc): 
+        return err, None
+    if acc.get("blocked"): 
+        return MONEY_BLOCKED, "Get blocked"
 
     return MONEY_OK, acc.get("balance", 0.0)
 
@@ -99,20 +106,40 @@ def transfer(from_acc: str, to_acc: str, amount: float):
         return MONEY_NO_FUNDS, "Insufficient funds"
     
     # Проверяем pending правила
-    err, pending_info = check_transfer_pending(to_acc, amount)
+    err, rule = db.check_pending_rule(to_acc)
     if err != db.SQL_OK:
-        return err, pending_info
+        return err, None
     
-    if pending_info.get("pending", False):
-        # Если есть pending правило, списываем средства но не зачисляем сразу
-        # Списание со счета отправителя
-        err = db.update_account_balance(from_acc, from_account["balance"] - amount)
+    if rule.get("applies", False):
+        # Если есть pending правило, создаем pending транзакцию
+        delay_hours = rule.get("delay_hours", 24)
+        reason = rule.get("reason", "Pending rule")
+        
+        # Создаем pending транзакцию
+        err, pending_id = db.add_pending_transaction(
+            to_account["id"], 
+            amount, 
+            reason, 
+            delay_hours
+        )
+        
+        if err != db.SQL_OK:
+            return err, pending_id
+        
+        # Списание средств со счета отправителя
+        err, _ = db.update_balance(from_account["id"], from_account["balance"] - amount)
         if err != db.SQL_OK:
             return err, None
         
-        return MONEY_OK, {
-            "pending": True,
-            "message": f"Перевод отправлен в ожидание на {pending_info['delay_hours']} часов. Причина: {pending_info['reason']}"
+        # Добавляем сумму в pending получателя
+        err, _ = db.add_to_pending(to_account["id"], amount)
+        if err != db.SQL_OK:
+            return err, None
+        
+        return MONEY_PENDING_TRANSFER, {
+            "delay_hours": delay_hours,
+            "reason": reason,
+            "pending_id": pending_id
         }
     
     # Обычный перевод
@@ -124,14 +151,15 @@ def transfer(from_acc: str, to_acc: str, amount: float):
     
     return MONEY_OK, None
 
-# Добавьте эту функцию в moneyOP.py:
 
 def create_account(user_id: int, account_name: str):
+    """Создание нового счета"""
     # Проверяем, не заблокирован ли пользователь
     if is_user_blocked(user_id):
         return MONEY_BLOCKED, "User is blocked"
     
     # Генерируем номер счета
+    import random
     acc_number = f"ACC-{user_id}-{random.randint(1000, 9999)}"
     
     err, _ = db.create_account(user_id, account_name, acc_number)
@@ -140,31 +168,85 @@ def create_account(user_id: int, account_name: str):
     
     return MONEY_OK, acc_number
 
-def check_transfer_pending(to_acc: str, amount: float):
-    """Проверка, нужно ли применять pending для перевода"""
-    err, rule = db.check_pending_rule(to_acc)
+
+# ======================
+# ADMIN FUNCTIONS
+# ======================
+def admin_block_user(user_id: int, block: bool = True):
+    """Блокировка/разблокировка пользователя"""
+    err, _ = db.block_user(user_id, block)
     if err != db.SQL_OK:
         return err, None
-    
-    if rule.get("applies", False):
-        # Получаем информацию о счете получателя
-        err, account = db.get_account_by_acc(to_acc)
-        if err != db.SQL_OK:
-            return err, None
-        
-        # Добавляем в pending
-        pending_id = db.add_pending_transaction(
-            account["id"], 
-            amount, 
-            rule["reason"], 
-            rule["delay_hours"]
-        )
-        
-        return MONEY_OK, {
-            "pending": True,
-            "delay_hours": rule["delay_hours"],
-            "reason": rule["reason"],
-            "pending_id": pending_id
-        }
-    
-    return MONEY_OK, {"pending": False}
+    return MONEY_OK, None
+
+
+def admin_block_account(acc_number: str, block: bool = True):
+    """Блокировка/разблокировка счета"""
+    err, _ = db.block_account(acc_number, block)
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, None
+
+
+def admin_delete_account(acc_number: str):
+    """Удаление счета"""
+    err, _ = db.delete_account(acc_number)
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, None
+
+
+def admin_update_balance(acc_number: str, new_balance: float):
+    """Изменение баланса счета"""
+    err, _ = db.update_account_balance(acc_number, new_balance)
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, None
+
+
+def admin_add_pending_rule(target_acc: str = None, delay_hours: int = 24, reason: str = "", admin_id: int = None):
+    """Добавление pending правила"""
+    err, rule_id = db.add_global_pending_rule(target_acc, delay_hours, reason, admin_id)
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, rule_id
+
+
+def admin_get_pending_rules():
+    """Получение всех pending правил"""
+    err, rules = db.get_global_pending_rules()
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, rules
+
+
+def admin_get_pending_transactions():
+    """Получение всех pending транзакций"""
+    err, transactions = db.get_pending_transactions()
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, transactions
+
+
+def admin_release_pending(pending_id: int):
+    """Освобождение pending транзакции"""
+    err, _ = db.release_pending_transaction(pending_id)
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, None
+
+
+def admin_get_all_users():
+    """Получение всех пользователей"""
+    err, users = db.get_all_users()
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, users
+
+
+def admin_get_all_accounts():
+    """Получение всех счетов"""
+    err, accounts = db.get_all_accounts()
+    if err != db.SQL_OK:
+        return err, None
+    return MONEY_OK, accounts

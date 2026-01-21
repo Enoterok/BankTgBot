@@ -14,6 +14,7 @@ from core import sqlite as db
 # FSM STATES
 # ======================
 class TransferFSM(StatesGroup):
+    from_acc = State()  # Новое состояние для выбора счета отправителя
     to_acc = State()
     amount = State()
 
@@ -112,13 +113,13 @@ class KeyboardManager:
         return kb.as_markup()
     
     @staticmethod
-    def account_selection(accounts):
+    def account_selection(accounts, prefix="select_acc"):
         """Выбор счета из списка"""
         kb = InlineKeyboardBuilder()
         for acc in accounts:
             kb.button(
                 text=f"{acc['name']} ({acc['balance']:.2f})", 
-                callback_data=f"select_acc_{acc['acc_number']}"
+                callback_data=f"{prefix}_{acc['acc_number']}"
             )
         kb.button(text="⬅️ Назад", callback_data="menu")
         kb.adjust(1)
@@ -131,6 +132,19 @@ class KeyboardManager:
         kb.button(text="✅ Да", callback_data=f"confirm_{action}_{data}")
         kb.button(text="❌ Нет", callback_data="cancel")
         kb.adjust(2)
+        return kb.as_markup()
+    
+    @staticmethod
+    def transfer_account_selection(accounts):
+        """Специальная клавиатура для выбора счета при переводе"""
+        kb = InlineKeyboardBuilder()
+        for acc in accounts:
+            kb.button(
+                text=f"{acc['name']} (Баланс: {acc['balance']:.2f})", 
+                callback_data=f"transfer_from_{acc['acc_number']}"
+            )
+        kb.button(text="❌ Отмена", callback_data="cancel")
+        kb.adjust(1)
         return kb.as_markup()
 
 
@@ -257,7 +271,7 @@ class BotHandlers:
     def register_handlers(self):
         """Регистрация всех обработчиков"""
         
-        # Основные команды
+        # Команды
         self.router.message(CommandStart())(self.start_handler)
         self.router.message(Command("help"))(self.help_handler)
         self.router.message(Command("balance"))(self.balance_command)
@@ -279,6 +293,7 @@ class BotHandlers:
         self.router.callback_query(F.data == "my_accounts")(self.my_accounts_callback)
         self.router.callback_query(F.data == "history")(self.history_callback)
         self.router.callback_query(F.data.startswith("select_acc_"))(self.select_account_callback)
+        self.router.callback_query(F.data.startswith("transfer_from_"))(self.select_transfer_from_callback)
         
         # Админские callback-обработчики
         self.router.callback_query(F.data == "admin_panel")(self.admin_panel_callback)
@@ -297,6 +312,7 @@ class BotHandlers:
         self.router.callback_query(F.data.startswith("confirm_"))(self.confirm_action_callback)
         
         # Обработчики FSM
+        self.router.message(TransferFSM.from_acc)(self.transfer_from_acc_handler)
         self.router.message(TransferFSM.to_acc)(self.transfer_to_acc_handler)
         self.router.message(TransferFSM.amount)(self.transfer_amount_handler)
         self.router.message(CreateAccountFSM.name)(self.create_account_name_handler)
@@ -327,7 +343,7 @@ class BotHandlers:
             await message.answer(f"❌ Ошибка регистрации: {status}")
             return
 
-        text = "👋 С возвращением! (/help)" if detail == "already_registered" else "🏦 Добро пожаловать в банк! (/help)"
+        text = "👋 С возвращением!" if detail == "already_registered" else "🏦 Добро пожаловать в банк!"
         await message.answer(text, reply_markup=KeyboardManager.main_menu(message.from_user.id))
     
     async def help_handler(self, message: types.Message):
@@ -345,11 +361,13 @@ class BotHandlers:
 
 <b>Операции:</b>
 • Просмотр баланса и состояния счетов
-• Переводы между счетами
+• Переводы между счетами (можно выбрать с какого счета)
+• Перевод на свой счет по имени счета
 • Создание новых счетов
 • Просмотр истории операций
 
 <b>Формат счета:</b> ACC-XXXXXXXXX
+<b>Перевод на свой счет:</b> Введите имя своего счета
         """
         await message.answer(help_text, parse_mode="HTML")
     
@@ -393,11 +411,35 @@ class BotHandlers:
     
     async def transfer_command(self, message: types.Message, state: FSMContext):
         """Обработчик команды /transfer"""
-        await state.set_state(TransferFSM.to_acc)
-        await message.answer(
-            "Введите номер счета получателя (формат: ACC-XXXX):",
-            reply_markup=KeyboardManager.cancel_action()
-        )
+        user_id = message.from_user.id
+        
+        err, accounts = db.get_accounts_by_user(user_id)
+        if err == db.SQL_NOT_FOUND or not accounts:
+            await message.answer("❌ У вас нет счетов для перевода")
+            return
+        
+        if len(accounts) == 1:
+            # Если только один счет, сразу используем его
+            await state.set_state(TransferFSM.to_acc)
+            await state.update_data(from_acc=accounts[0]['acc_number'])
+            await message.answer(
+                "💸 <b>Перевод средств</b>\n\n"
+                "Введите номер счета получателя или имя своего счета:\n\n"
+                "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n"
+                "• <b>Имя счета</b> - для перевода на свой счет\n\n"
+                "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
+                parse_mode="HTML",
+                reply_markup=KeyboardManager.cancel_action()
+            )
+        else:
+            # Если несколько счетов, предлагаем выбрать
+            await state.set_state(TransferFSM.from_acc)
+            await message.answer(
+                "💸 <b>Перевод средств</b>\n\n"
+                "Выберите счет с которого будете переводить:",
+                parse_mode="HTML",
+                reply_markup=KeyboardManager.transfer_account_selection(accounts)
+            )
     
     async def create_account_command(self, message: types.Message, state: FSMContext):
         """Обработчик команды /create_account"""
@@ -519,11 +561,55 @@ class BotHandlers:
     
     async def transfer_callback(self, callback: types.CallbackQuery, state: FSMContext):
         """Обработка кнопки Перевод"""
+        user_id = callback.from_user.id
+        
+        err, accounts = db.get_accounts_by_user(user_id)
+        if err == db.SQL_NOT_FOUND or not accounts:
+            await callback.answer("❌ У вас нет счетов для перевода", show_alert=True)
+            return
+        
+        if len(accounts) == 1:
+            # Если только один счет, сразу используем его
+            await state.set_state(TransferFSM.to_acc)
+            await state.update_data(from_acc=accounts[0]['acc_number'])
+            await callback.message.edit_text(
+                "💸 <b>Перевод средств</b>\n\n"
+                "Введите номер счета получателя или имя своего счета:\n\n"
+                "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n"
+                "• <b>Имя счета</b> - для перевода на свой счет\n\n"
+                "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
+                parse_mode="HTML",
+                reply_markup=KeyboardManager.cancel_action()
+            )
+        else:
+            # Если несколько счетов, предлагаем выбрать
+            await state.set_state(TransferFSM.from_acc)
+            await callback.message.edit_text(
+                "💸 <b>Перевод средств</b>\n\n"
+                "Выберите счет с которого будете переводить:",
+                parse_mode="HTML",
+                reply_markup=KeyboardManager.transfer_account_selection(accounts)
+            )
+        await callback.answer()
+    
+    async def select_transfer_from_callback(self, callback: types.CallbackQuery, state: FSMContext):
+        """Обработка выбора счета для перевода"""
+        acc_number = callback.data.replace("transfer_from_", "")
+        
+        # Проверяем, что счет принадлежит пользователю
+        err, account = db.get_account_by_acc(acc_number)
+        if err != db.SQL_OK or account['user_id'] != callback.from_user.id:
+            await callback.answer("❌ Ошибка выбора счета", show_alert=True)
+            return
+        
+        await state.update_data(from_acc=acc_number)
         await state.set_state(TransferFSM.to_acc)
         await callback.message.edit_text(
             "💸 <b>Перевод средств</b>\n\n"
-            "Введите номер счета получателя:\n"
-            "<code>ACC-XXXXXXXXX</code>",
+            "Введите номер счета получателя или имя своего счета:\n\n"
+            "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n"
+            "• <b>Имя счета</b> - для перевода на свой счет\n\n"
+            "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
             parse_mode="HTML",
             reply_markup=KeyboardManager.cancel_action()
         )
@@ -547,6 +633,7 @@ class BotHandlers:
         err, accounts = db.get_accounts_by_user(user_id)
         
         if err == db.SQL_NOT_FOUND:
+            # У пользователя нет счетов
             await callback.message.edit_text(
                 "📊 <b>Ваши счета</b>\n\n"
                 "У вас еще нет счетов.\n"
@@ -558,15 +645,13 @@ class BotHandlers:
             return
         
         if err != db.SQL_OK:
+            # Другая ошибка БД
             await callback.answer(f"❌ Ошибка БД: {err}", show_alert=True)
             return
         
+        # Форматируем сообщение со счетами
         if not accounts:
-            await callback.message.edit_text(
-                "📊 <b>Ваши счета</b>\n\nУ вас еще нет счетов.",
-                parse_mode="HTML",
-                reply_markup=KeyboardManager.back_to_menu()
-            )
+            text = "📊 <b>Ваши счета</b>\n\nУ вас еще нет счетов."
         else:
             text = "📊 <b>Ваши счета:</b>\n\n"
             for i, acc in enumerate(accounts, 1):
@@ -578,17 +663,22 @@ class BotHandlers:
                     f"   ⏳ В удержании: {acc['pending']:.2f}\n"
                     f"   📊 {status}\n\n"
                 )
-            
+        
+        try:
             await callback.message.edit_text(
                 text,
                 parse_mode="HTML",
                 reply_markup=KeyboardManager.back_to_menu()
             )
+        except TelegramBadRequest:
+            # Если сообщение не изменилось
+            pass
         
         await callback.answer()
     
     async def history_callback(self, callback: types.CallbackQuery):
         """Обработка кнопки История"""
+        # TODO: Добавить функцию получения истории транзакций
         await callback.message.edit_text(
             "📝 <b>История операций</b>\n\n"
             "Функция в разработке...",
@@ -884,6 +974,32 @@ class BotHandlers:
                         reply_markup=KeyboardManager.back_to_admin()
                     )
             
+            elif action == "blockaccount":
+                err, _ = db.block_account(target_data, True)
+                if err == db.SQL_OK:
+                    await callback.message.edit_text(
+                        f"✅ Счет {target_data} заблокирован",
+                        reply_markup=KeyboardManager.back_to_admin()
+                    )
+                else:
+                    await callback.message.edit_text(
+                        f"❌ Ошибка: {err}",
+                        reply_markup=KeyboardManager.back_to_admin()
+                    )
+            
+            elif action == "unblockaccount":
+                err, _ = db.block_account(target_data, False)
+                if err == db.SQL_OK:
+                    await callback.message.edit_text(
+                        f"✅ Счет {target_data} разблокирован",
+                        reply_markup=KeyboardManager.back_to_admin()
+                    )
+                else:
+                    await callback.message.edit_text(
+                        f"❌ Ошибка: {err}",
+                        reply_markup=KeyboardManager.back_to_admin()
+                    )
+            
             elif action == "deleteaccount":
                 err, _ = db.delete_account(target_data)
                 if err == db.SQL_OK:
@@ -909,9 +1025,12 @@ class BotHandlers:
     # ======================
     # FSM HANDLERS
     # ======================
-    async def transfer_to_acc_handler(self, message: types.Message, state: FSMContext):
-        """Обработка номера счета для перевода"""
-        if not message.text or not message.text.startswith("ACC-"):
+    async def transfer_from_acc_handler(self, message: types.Message, state: FSMContext):
+        """Обработка ввода счета отправителя через сообщение"""
+        # Этот обработчик для случая, если пользователь ввел номер счета вручную
+        acc_number = message.text.strip()
+        
+        if not acc_number.startswith("ACC-"):
             await message.answer(
                 "❌ Неверный формат счета.\n"
                 "Используйте формат: ACC-XXXXXXXXX",
@@ -919,11 +1038,75 @@ class BotHandlers:
             )
             return
         
+        # Проверяем, что счет принадлежит пользователю
+        err, account = db.get_account_by_acc(acc_number)
+        if err != db.SQL_OK or account['user_id'] != message.from_user.id:
+            await message.answer(
+                f"❌ Счет {acc_number} не найден или не принадлежит вам",
+                reply_markup=KeyboardManager.cancel_action()
+            )
+            return
+        
+        await state.update_data(from_acc=acc_number)
+        await state.set_state(TransferFSM.to_acc)
+        
+        await message.answer(
+            f"✅ Выбран счет: {account['name']} ({acc_number})\n\n"
+            f"Введите номер счета получателя или имя своего счета:\n\n"
+            f"• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n"
+            f"• <b>Имя счета</b> - для перевода на свой счет\n\n"
+            f"<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
+            parse_mode="HTML",
+            reply_markup=KeyboardManager.cancel_action()
+        )
+    
+    async def transfer_to_acc_handler(self, message: types.Message, state: FSMContext):
+        """Обработка номера счета для перевода"""
+        to_acc_input = message.text.strip()
+        data = await state.get_data()
+        from_acc = data.get("from_acc")
+        user_id = message.from_user.id
+        
+        # Если пользователь не выбрал счет отправителя, возвращаемся к выбору
+        if not from_acc:
+            await state.set_state(TransferFSM.from_acc)
+            await message.answer(
+                "❌ Сначала выберите счет отправителя",
+                reply_markup=KeyboardManager.cancel_action()
+            )
+            return
+        
+        to_acc = None
+        
+        # Проверяем, является ли ввод именем счета (не начинается с ACC-)
+        if not to_acc_input.startswith("ACC-"):
+            # Ищем счет по имени у текущего пользователя
+            err, account = db.get_account_by_name_and_user(to_acc_input, user_id)
+            if err == db.SQL_OK:
+                to_acc = account['acc_number']
+            else:
+                await message.answer(
+                    f"❌ Счет с именем '{to_acc_input}' не найден у вас\n"
+                    f"Введите номер счета (ACC-...) или имя своего счета:",
+                    reply_markup=KeyboardManager.cancel_action()
+                )
+                return
+        else:
+            to_acc = to_acc_input
+        
+        # Проверяем, что не пытаемся перевести на тот же счет
+        if from_acc == to_acc:
+            await message.answer(
+                "❌ Нельзя перевести средства на тот же счет",
+                reply_markup=KeyboardManager.cancel_action()
+            )
+            return
+        
         # Проверяем существование счета получателя
-        err, to_account = db.get_account_by_acc(message.text.strip())
+        err, to_account = db.get_account_by_acc(to_acc)
         if err != db.SQL_OK:
             await message.answer(
-                f"❌ Счет не найден: {message.text}",
+                f"❌ Счет не найден: {to_acc}",
                 reply_markup=KeyboardManager.cancel_action()
             )
             return
@@ -935,11 +1118,17 @@ class BotHandlers:
             )
             return
         
-        await state.update_data(to_acc=message.text.strip())
+        await state.update_data(to_acc=to_acc)
         await state.set_state(TransferFSM.amount)
         
+        # Получаем информацию о счете отправителя для отображения
+        err, from_account = db.get_account_by_acc(from_acc)
+        from_name = from_account.get('name', 'Без имени') if err == db.SQL_OK else 'Неизвестно'
+        
         await message.answer(
-            f"✅ Счет найден\n\n"
+            f"✅ Счет получателя найден\n\n"
+            f"📤 От: {from_name} ({from_acc})\n"
+            f"📥 Кому: {to_account.get('name', 'Без имени')} ({to_acc})\n\n"
             f"Введите сумму перевода:",
             reply_markup=KeyboardManager.cancel_action()
         )
@@ -959,45 +1148,34 @@ class BotHandlers:
         
         data = await state.get_data()
         to_acc = data["to_acc"]
-        
-        # Получаем счета отправителя
-        err, accounts = db.get_accounts_by_user(message.from_user.id)
-        
-        if err == db.SQL_NOT_FOUND or not accounts:
-            await message.answer("❌ У вас нет счетов для перевода")
-            await state.clear()
-            return
-        
-        if err != db.SQL_OK:
-            await message.answer(f"Ошибка БД: {err}")
-            await state.clear()
-            return
-        
-        # Берем первый (основной) счет
-        from_acc = accounts[0]
+        from_acc = data["from_acc"]
         
         # Выполняем перевод
-        status, detail = op.transfer(from_acc["acc_number"], to_acc, amount)
+        status, detail = op.transfer(from_acc, to_acc, amount)
         
         if status == op.MONEY_OK:
-            if isinstance(detail, dict) and detail.get("pending"):
-                await message.answer(
-                    f"⏳ Перевод отправлен в ожидание!\n\n"
-                    f"📤 От: {from_acc['acc_number']}\n"
-                    f"📥 Кому: {to_acc}\n"
-                    f"💵 Сумма: {amount}\n"
-                    f"⏱️ Задержка: {detail.get('delay_hours', 24)} часов\n"
-                    f"📝 Причина: {detail.get('reason', 'Не указана')}",
-                    reply_markup=KeyboardManager.main_menu(message.from_user.id)
-                )
-            else:
-                await message.answer(
-                    f"✅ Перевод выполнен успешно!\n\n"
-                    f"📤 От: {from_acc['acc_number']}\n"
-                    f"📥 Кому: {to_acc}\n"
-                    f"💵 Сумма: {amount}",
-                    reply_markup=KeyboardManager.main_menu(message.from_user.id)
-                )
+            await message.answer(
+                f"✅ Перевод выполнен успешно!\n\n"
+                f"📤 От: {from_acc}\n"
+                f"📥 Кому: {to_acc}\n"
+                f"💵 Сумма: {amount}",
+                reply_markup=KeyboardManager.main_menu(message.from_user.id)
+            )
+        elif status == op.MONEY_PENDING_TRANSFER:
+            # Обработка pending перевода
+            delay_hours = detail.get("delay_hours", 24)
+            reason = detail.get("reason", "Не указана")
+            
+            await message.answer(
+                f"⏳ Перевод отправлен в ожидание!\n\n"
+                f"📤 От: {from_acc}\n"
+                f"📥 Кому: {to_acc}\n"
+                f"💵 Сумма: {amount}\n"
+                f"⏱️ Задержка: {delay_hours} часов\n"
+                f"📝 Причина: {reason}\n\n"
+                f"Средства будут зачислены после проверки.",
+                reply_markup=KeyboardManager.main_menu(message.from_user.id)
+            )
         else:
             error_message = {
                 op.MONEY_ACC_NOT_FOUND: "❌ Счет не найден",
@@ -1026,27 +1204,23 @@ class BotHandlers:
             return
         
         # Создаем новый счет
-        err, result = db.create_account(
-            message.from_user.id,
-            account_name,
-            f"ACC-{message.from_user.id}-{len(account_name)}"  # Простая генерация номера
-        )
+        status, result = op.create_account(message.from_user.id, account_name)
         
-        if err == db.SQL_OK:
+        if status == op.MONEY_OK:
             await message.answer(
                 f"✅ Счет создан успешно!\n\n"
                 f"🏷️ Название: {account_name}\n"
-                f"📟 Номер: {f'ACC-{message.from_user.id}-{len(account_name)}'}",
+                f"📟 Номер: {result}",
                 reply_markup=KeyboardManager.main_menu(message.from_user.id)
             )
-        elif err == db.SQL_ALREADY_EXISTS:
+        elif status == op.MONEY_BLOCKED:
             await message.answer(
-                "❌ Счет с таким номером уже существует",
+                "❌ Вы заблокированы и не можете создавать новые счета",
                 reply_markup=KeyboardManager.main_menu(message.from_user.id)
             )
         else:
             await message.answer(
-                f"❌ Ошибка создания счета: {err}",
+                f"❌ Ошибка создания счета: {status}",
                 reply_markup=KeyboardManager.main_menu(message.from_user.id)
             )
         
@@ -1153,7 +1327,7 @@ class BotHandlers:
                 f"👤 Владелец: {account['username']}\n"
                 f"🆔 ID владельца: {account['user_id']}\n"
                 f"💰 Баланс: {account['balance']:.2f}\n"
-                f"📊 Статус: {'🔴 Заблокирован' if account['blocked'] else '🟢 Активен'}\n\n"
+                f"📊 Статус: {'🔴 Заблокирован' if account['blocked'] else '🟢 Активen'}\n\n"
                 f"<b>Разблокировка разрешит операции со счетом!</b>",
                 parse_mode="HTML",
                 reply_markup=KeyboardManager.yes_no_keyboard("unblockaccount", acc_number)
