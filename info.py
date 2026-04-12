@@ -1,6 +1,6 @@
 # info.py
 TOKEN = '***REMOVED***'
-
+PROXY = "https://38.145.220.96:8445"
 ADMIN_ID = [6120496361]  # ID администраторов
 
 trash_list = ['__class__', '__delattr__', '__dict__', '__dir__', '__doc__', '__eq__', '__format__', '__ge__', '__getattribute__', '__getstate__', '__gt__', 

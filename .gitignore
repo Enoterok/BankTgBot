@@ -4,6 +4,7 @@ logs/
 log_*.txt
 
 # Базы данных
+cs-config*
 info*
 info.py
 *.db
@@ -18,6 +19,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.vs
 
 # Виртуальное окружение
 venv/

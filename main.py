@@ -5,7 +5,8 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from info import TOKEN, ADMIN_ID
+from aiogram.client.session.aiohttp import AiohttpSession
+from info import TOKEN, ADMIN_ID, PROXY
 
 from core import moneyOP as op
 from core import sqlite as db
@@ -1614,6 +1615,8 @@ class BankBotApplication:
     
     def __init__(self, token: str):
         self.token = token
+        self.session = AiohttpSession() 
+        session = AiohttpSession(proxy=PROXY)
         self.bot = Bot(token=token)
         self.dp = Dispatcher()
         self.router = Router()
@@ -1638,7 +1641,11 @@ class BankBotApplication:
             return
         
         print("Бот запущен...")
-        await self.dp.start_polling(self.bot)
+        try:
+            await self.bot.delete_webhook(drop_pending_updates=True)
+            await self.dp.start_polling(self.bot)
+        finally:
+            await self.bot.session.close()
 
 
 # ======================
