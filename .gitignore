@@ -14,8 +14,9 @@ data/
 *.sqlite
 *.sqlite3
 
-# Python кэш
+# Кэш
 __pycache__/
+bin/
 *.pyc
 *.pyo
 *.pyd

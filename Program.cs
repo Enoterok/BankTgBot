@@ -7,7 +7,6 @@ class Program
 {
     static async Task Main(string[] args)
     {
-        // Загружаем конфигурацию
         AppConfig.Initialize("cs-config.json");
 
         if (string.IsNullOrEmpty(AppConfig.Bot.Token))
@@ -27,7 +26,6 @@ class Program
 
         await botService.StartAsync(cts.Token);
 
-        // Бесконечное ожидание
         try
         {
             await Task.Delay(-1, cts.Token);

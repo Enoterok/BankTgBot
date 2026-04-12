@@ -250,9 +250,9 @@ public class BankBotService
             ? "👋 С возвращением!"
             : "🏦 Добро пожаловать в банк!";
 
-        await _botClient.SendTextMessageAsync(
-            message.Chat.Id,
-            text,
+        await _botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: text,
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.MainMenu(userId)
         );
@@ -280,7 +280,11 @@ public class BankBotService
 <b>Формат счета:</b> ACC-XXXXXXXXX
 <b>Перевод на свой счет:</b> Введите имя своего счета
 ";
-        await _botClient.SendTextMessageAsync(message.Chat.Id, helpText, parseMode: ParseMode.Html);
+        await _botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: helpText,
+            parseMode: ParseMode.Html
+        );
     }
 
     private async Task BalanceCommand(Message message)
@@ -290,8 +294,9 @@ public class BankBotService
 
         if (accountsResult.Code == ErrorCode.NotFound || accountsResult.Data == null || accountsResult.Data.Count == 0)
         {
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                "💰 <b>Баланс</b>\n\nУ вас нет счетов.\nСоздайте первый счет через меню.",
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "💰 <b>Баланс</b>\n\nУ вас нет счетов.\nСоздайте первый счет через меню.",
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.MainMenu(userId));
             return;
@@ -300,15 +305,17 @@ public class BankBotService
         if (accountsResult.Data.Count == 1)
         {
             var acc = accountsResult.Data[0];
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                MessageFormatter.FormatBalance(acc),
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: MessageFormatter.FormatBalance(acc),
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.BackToMenu());
         }
         else
         {
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                "Выберите счет для просмотра баланса:",
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "Выберите счет для просмотра баланса:",
                 replyMarkup: KeyboardManager.AccountSelection(accountsResult.Data));
         }
     }
@@ -325,7 +332,9 @@ public class BankBotService
 
         if (accountsResult.Code == ErrorCode.NotFound || accountsResult.Data == null || accountsResult.Data.Count == 0)
         {
-            await _botClient.SendTextMessageAsync(message.Chat.Id, "❌ У вас нет счетов для перевода");
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "❌ У вас нет счетов для перевода");
             return;
         }
 
@@ -334,21 +343,22 @@ public class BankBotService
         {
             state.TransferState = TransferState.ToAccount;
             state.FromAccount = accountsResult.Data[0].AccNumber;
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                "💸 <b>Перевод средств</b>\n\n" +
-                "Введите номер счета получателя или имя своего счета:\n\n" +
-                "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n" +
-                "• <b>Имя счета</b> - для перевода на свой счет\n\n" +
-                "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "💸 <b>Перевод средств</b>\n\n" +
+                      "Введите номер счета получателя или имя своего счета:\n\n" +
+                      "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n" +
+                      "• <b>Имя счета</b> - для перевода на свой счет\n\n" +
+                      "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.CancelAction());
         }
         else
         {
             state.TransferState = TransferState.FromAccount;
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                "💸 <b>Перевод средств</b>\n\n" +
-                "Выберите счет с которого будете переводить:",
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "💸 <b>Перевод средств</b>\n\nВыберите счет с которого будете переводить:",
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.TransferAccountSelection(accountsResult.Data));
         }
@@ -358,8 +368,9 @@ public class BankBotService
     {
         var state = UserStateStorage.GetOrCreate(message.From!.Id);
         state.CreateAccountState = CreateAccountState.Name;
-        await _botClient.SendTextMessageAsync(message.Chat.Id,
-            "Введите название для нового счета:",
+        await _botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: "Введите название для нового счета:",
             replyMarkup: KeyboardManager.CancelAction());
     }
 
@@ -367,12 +378,15 @@ public class BankBotService
     {
         if (!AppConfig.Bot.AdminIds.Contains(message.From!.Id))
         {
-            await _botClient.SendTextMessageAsync(message.Chat.Id, "❌ У вас нет доступа к админ-панели");
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "❌ У вас нет доступа к админ-панели");
             return;
         }
 
-        await _botClient.SendTextMessageAsync(message.Chat.Id,
-            "👑 <b>Админ-панель банк-бота</b>\n\nВыберите действие:",
+        await _botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: "👑 <b>Админ-панель банк-бота</b>\n\nВыберите действие:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.AdminMenu());
     }
@@ -383,11 +397,14 @@ public class BankBotService
         var usersResult = await _db.GetAllUsersAsync();
         if (!usersResult.IsSuccess)
         {
-            await _botClient.SendTextMessageAsync(message.Chat.Id, $"❌ Ошибка: {usersResult.ErrorMessage}");
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: $"❌ Ошибка: {usersResult.ErrorMessage}");
             return;
         }
-        await _botClient.SendTextMessageAsync(message.Chat.Id,
-            MessageFormatter.FormatUserList(usersResult.Data),
+        await _botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: MessageFormatter.FormatUserList(usersResult.Data),
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.BackToAdmin());
     }
@@ -398,11 +415,14 @@ public class BankBotService
         var accountsResult = await _db.GetAllAccountsAsync();
         if (!accountsResult.IsSuccess)
         {
-            await _botClient.SendTextMessageAsync(message.Chat.Id, $"❌ Ошибка: {accountsResult.ErrorMessage}");
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: $"❌ Ошибка: {accountsResult.ErrorMessage}");
             return;
         }
-        await _botClient.SendTextMessageAsync(message.Chat.Id,
-            MessageFormatter.FormatAccountList(accountsResult.Data),
+        await _botClient.SendMessage(
+            chatId: message.Chat.Id,
+            text: MessageFormatter.FormatAccountList(accountsResult.Data),
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.BackToAdmin());
     }
@@ -410,10 +430,10 @@ public class BankBotService
     // ====================== Callback методы ======================
     private async Task MenuCallback(CallbackQuery callback)
     {
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id,
-            callback.Message.MessageId,
-            "🏦 Главное меню банк-бота",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "🏦 Главное меню банк-бота",
             replyMarkup: KeyboardManager.MainMenu(callback.From.Id)
         );
     }
@@ -421,10 +441,10 @@ public class BankBotService
     private async Task CancelCallback(CallbackQuery callback, UserStateData state)
     {
         state.Clear();
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id,
-            callback.Message.MessageId,
-            "❌ Операция отменена",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "❌ Операция отменена",
             replyMarkup: KeyboardManager.MainMenu(callback.From.Id)
         );
     }
@@ -436,9 +456,10 @@ public class BankBotService
 
         if (accountsResult.Code == ErrorCode.NotFound || accountsResult.Data == null || accountsResult.Data.Count == 0)
         {
-            await _botClient.EditMessageTextAsync(
-                callback.Message!.Chat.Id, callback.Message.MessageId,
-                "💰 <b>Баланс</b>\n\nУ вас нет счетов.\nСоздайте первый счет через меню.",
+            await _botClient.EditMessageText(
+                chatId: callback.Message!.Chat.Id,
+                messageId: callback.Message.MessageId,
+                text: "💰 <b>Баланс</b>\n\nУ вас нет счетов.\nСоздайте первый счет через меню.",
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.MainMenu(userId));
             return;
@@ -446,17 +467,19 @@ public class BankBotService
 
         if (accountsResult.Data.Count == 1)
         {
-            await _botClient.EditMessageTextAsync(
-                callback.Message!.Chat.Id, callback.Message.MessageId,
-                MessageFormatter.FormatBalance(accountsResult.Data[0]),
+            await _botClient.EditMessageText(
+                chatId: callback.Message!.Chat.Id,
+                messageId: callback.Message.MessageId,
+                text: MessageFormatter.FormatBalance(accountsResult.Data[0]),
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.BackToMenu());
         }
         else
         {
-            await _botClient.EditMessageTextAsync(
-                callback.Message!.Chat.Id, callback.Message.MessageId,
-                "Выберите счет для просмотра баланса:",
+            await _botClient.EditMessageText(
+                chatId: callback.Message!.Chat.Id,
+                messageId: callback.Message.MessageId,
+                text: "Выберите счет для просмотра баланса:",
                 replyMarkup: KeyboardManager.AccountSelection(accountsResult.Data));
         }
     }
@@ -476,23 +499,24 @@ public class BankBotService
         {
             state.TransferState = TransferState.ToAccount;
             state.FromAccount = accountsResult.Data[0].AccNumber;
-            await _botClient.EditMessageTextAsync(
-                callback.Message!.Chat.Id, callback.Message.MessageId,
-                "💸 <b>Перевод средств</b>\n\n" +
-                "Введите номер счета получателя или имя своего счета:\n\n" +
-                "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n" +
-                "• <b>Имя счета</b> - для перевода на свой счет\n\n" +
-                "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
+            await _botClient.EditMessageText(
+                chatId: callback.Message!.Chat.Id,
+                messageId: callback.Message.MessageId,
+                text: "💸 <b>Перевод средств</b>\n\n" +
+                      "Введите номер счета получателя или имя своего счета:\n\n" +
+                      "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n" +
+                      "• <b>Имя счета</b> - для перевода на свой счет\n\n" +
+                      "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.CancelAction());
         }
         else
         {
             state.TransferState = TransferState.FromAccount;
-            await _botClient.EditMessageTextAsync(
-                callback.Message!.Chat.Id, callback.Message.MessageId,
-                "💸 <b>Перевод средств</b>\n\n" +
-                "Выберите счет с которого будете переводить:",
+            await _botClient.EditMessageText(
+                chatId: callback.Message!.Chat.Id,
+                messageId: callback.Message.MessageId,
+                text: "💸 <b>Перевод средств</b>\n\nВыберите счет с которого будете переводить:",
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.TransferAccountSelection(accountsResult.Data));
         }
@@ -501,9 +525,10 @@ public class BankBotService
     private async Task CreateAccountCallback(CallbackQuery callback, UserStateData state)
     {
         state.CreateAccountState = CreateAccountState.Name;
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "➕ <b>Создание нового счета</b>\n\nВведите название для нового счета:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "➕ <b>Создание нового счета</b>\n\nВведите название для нового счета:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -515,9 +540,10 @@ public class BankBotService
 
     private async Task HistoryCallback(CallbackQuery callback)
     {
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "📝 <b>История операций</b>\n\nФункция в разработке...",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "📝 <b>История операций</b>\n\nФункция в разработке...",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.BackToMenu());
     }
@@ -532,9 +558,10 @@ public class BankBotService
             return;
         }
 
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            MessageFormatter.FormatBalance(accResult.Data),
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: MessageFormatter.FormatBalance(accResult.Data),
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.BackToMenu());
     }
@@ -552,13 +579,14 @@ public class BankBotService
         state.TransferState = TransferState.ToAccount;
         state.FromAccount = accNumber;
 
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "💸 <b>Перевод средств</b>\n\n" +
-            "Введите номер счета получателя или имя своего счета:\n\n" +
-            "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n" +
-            "• <b>Имя счета</b> - для перевода на свой счет\n\n" +
-            "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "💸 <b>Перевод средств</b>\n\n" +
+                  "Введите номер счета получателя или имя своего счета:\n\n" +
+                  "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n" +
+                  "• <b>Имя счета</b> - для перевода на свой счет\n\n" +
+                  "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -572,10 +600,10 @@ public class BankBotService
             return;
         }
 
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id,
-            callback.Message.MessageId,
-            "👑 <b>Админ-панель банк-бота</b>\n\nВыберите действие:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "👑 <b>Админ-панель банк-бота</b>\n\nВыберите действие:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.AdminMenu()
         );
@@ -590,9 +618,10 @@ public class BankBotService
             await _botClient.AnswerCallbackQuery(callback.Id, $"❌ Ошибка: {usersResult.ErrorMessage}", showAlert: true);
             return;
         }
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            MessageFormatter.FormatUserList(usersResult.Data),
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: MessageFormatter.FormatUserList(usersResult.Data),
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.BackToAdmin());
     }
@@ -606,9 +635,10 @@ public class BankBotService
             await _botClient.AnswerCallbackQuery(callback.Id, $"❌ Ошибка: {accountsResult.ErrorMessage}", showAlert: true);
             return;
         }
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            MessageFormatter.FormatAccountList(accountsResult.Data),
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: MessageFormatter.FormatAccountList(accountsResult.Data),
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.BackToAdmin());
     }
@@ -618,9 +648,10 @@ public class BankBotService
         if (!AppConfig.Bot.AdminIds.Contains(callback.From.Id)) return;
         state.AdminBlockUserState = AdminBlockUserState.UserId;
         state.Action = "block";
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "🔒 <b>Блокировка пользователя</b>\n\nВведите ID пользователя для блокировки:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "🔒 <b>Блокировка пользователя</b>\n\nВведите ID пользователя для блокировки:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -630,9 +661,10 @@ public class BankBotService
         if (!AppConfig.Bot.AdminIds.Contains(callback.From.Id)) return;
         state.AdminBlockUserState = AdminBlockUserState.UserId;
         state.Action = "unblock";
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "🔓 <b>Разблокировка пользователя</b>\n\nВведите ID пользователя для разблокировки:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "🔓 <b>Разблокировка пользователя</b>\n\nВведите ID пользователя для разблокировки:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -642,9 +674,10 @@ public class BankBotService
         if (!AppConfig.Bot.AdminIds.Contains(callback.From.Id)) return;
         state.AdminBlockAccountState = AdminBlockAccountState.AccountNumber;
         state.Action = "block";
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "⛔ <b>Блокировка счета</b>\n\nВведите номер счета для блокировки:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "⛔ <b>Блокировка счета</b>\n\nВведите номер счета для блокировки:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -654,9 +687,10 @@ public class BankBotService
         if (!AppConfig.Bot.AdminIds.Contains(callback.From.Id)) return;
         state.AdminBlockAccountState = AdminBlockAccountState.AccountNumber;
         state.Action = "unblock";
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "✅ <b>Разблокировка счета</b>\n\nВведите номер счета для разблокировки:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "✅ <b>Разблокировка счета</b>\n\nВведите номер счета для разблокировки:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -665,9 +699,10 @@ public class BankBotService
     {
         if (!AppConfig.Bot.AdminIds.Contains(callback.From.Id)) return;
         state.AdminDeleteAccountState = AdminDeleteAccountState.AccountNumber;
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "🗑️ <b>Удаление счета</b>\n\nВведите номер счета для удаления:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "🗑️ <b>Удаление счета</b>\n\nВведите номер счета для удаления:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -676,9 +711,10 @@ public class BankBotService
     {
         if (!AppConfig.Bot.AdminIds.Contains(callback.From.Id)) return;
         state.AdminUpdateBalanceState = AdminUpdateBalanceState.AccountNumber;
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "💰 <b>Изменение баланса счета</b>\n\nВведите номер счета:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "💰 <b>Изменение баланса счета</b>\n\nВведите номер счета:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -687,9 +723,10 @@ public class BankBotService
     {
         if (!AppConfig.Bot.AdminIds.Contains(callback.From.Id)) return;
         state.AdminAddPendingState = AdminAddPendingState.TargetAccount;
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "⏳ <b>Добавление правила pending</b>\n\nВведите номер счета (или оставьте пустым для всех счетов):",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "⏳ <b>Добавление правила pending</b>\n\nВведите номер счета (или оставьте пустым для всех счетов):",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -698,9 +735,10 @@ public class BankBotService
     {
         if (!AppConfig.Bot.AdminIds.Contains(callback.From.Id)) return;
         state.AdminGlobalPendingState = AdminGlobalPendingState.DelayHours;
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            "🌍 <b>Глобальное правило pending</b>\n\nВведите время задержки в часах:",
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: "🌍 <b>Глобальное правило pending</b>\n\nВведите время задержки в часах:",
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.CancelAction());
     }
@@ -714,9 +752,10 @@ public class BankBotService
             await _botClient.AnswerCallbackQuery(callback.Id, $"❌ Ошибка: {rulesResult.ErrorMessage}", showAlert: true);
             return;
         }
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            MessageFormatter.FormatPendingRules(rulesResult.Data),
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: MessageFormatter.FormatPendingRules(rulesResult.Data),
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.BackToAdmin());
     }
@@ -730,9 +769,10 @@ public class BankBotService
             await _botClient.AnswerCallbackQuery(callback.Id, $"❌ Ошибка: {transResult.ErrorMessage}", showAlert: true);
             return;
         }
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            MessageFormatter.FormatPendingTransactions(transResult.Data),
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: MessageFormatter.FormatPendingTransactions(transResult.Data),
             parseMode: ParseMode.Html,
             replyMarkup: KeyboardManager.BackToAdmin());
     }
@@ -784,9 +824,10 @@ public class BankBotService
             messageText = $"❌ Ошибка: {ex.Message}";
         }
 
-        await _botClient.EditMessageTextAsync(
-            callback.Message!.Chat.Id, callback.Message.MessageId,
-            messageText,
+        await _botClient.EditMessageText(
+            chatId: callback.Message!.Chat.Id,
+            messageId: callback.Message.MessageId,
+            text: messageText,
             replyMarkup: KeyboardManager.BackToAdmin());
 
         state.Clear();
@@ -801,27 +842,30 @@ public class BankBotService
                 string accInput = message.Text!.Trim();
                 if (!accInput.StartsWith("ACC-"))
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Неверный формат счета. Используйте формат: ACC-XXXXXXXXX",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Неверный формат счета. Используйте формат: ACC-XXXXXXXXX",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
                 var accResult = await _db.GetAccountByAccNumberAsync(accInput);
                 if (!accResult.IsSuccess || accResult.Data.UserId != message.From!.Id)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"❌ Счет {accInput} не найден или не принадлежит вам",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"❌ Счет {accInput} не найден или не принадлежит вам",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
                 state.FromAccount = accInput;
                 state.TransferState = TransferState.ToAccount;
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    $"✅ Выбран счет: {accResult.Data.Name} ({accInput})\n\n" +
-                    "Введите номер счета получателя или имя своего счета:\n\n" +
-                    "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n" +
-                    "• <b>Имя счета</b> - для перевода на свой счет\n\n" +
-                    "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: $"✅ Выбран счет: {accResult.Data.Name} ({accInput})\n\n" +
+                          "Введите номер счета получателя или имя своего счета:\n\n" +
+                          "• <code>ACC-XXXXXXXXX</code> - для перевода на другой счет\n" +
+                          "• <b>Имя счета</b> - для перевода на свой счет\n\n" +
+                          "<i>Пример: 'Накопительный' (перевод на ваш счет с таким именем)</i>",
                     parseMode: ParseMode.Html,
                     replyMarkup: KeyboardManager.CancelAction());
                 break;
@@ -834,8 +878,9 @@ public class BankBotService
                     var accByName = await _db.GetAccountByNameAndUserAsync(toInput, message.From!.Id);
                     if (!accByName.IsSuccess)
                     {
-                        await _botClient.SendTextMessageAsync(message.Chat.Id,
-                            $"❌ Счет с именем '{toInput}' не найден у вас",
+                        await _botClient.SendMessage(
+                            chatId: message.Chat.Id,
+                            text: $"❌ Счет с именем '{toInput}' не найден у вас",
                             replyMarkup: KeyboardManager.CancelAction());
                         return;
                     }
@@ -848,8 +893,9 @@ public class BankBotService
 
                 if (state.FromAccount == toAccNumber)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Нельзя перевести средства на тот же счет",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Нельзя перевести средства на тот же счет",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
@@ -857,15 +903,17 @@ public class BankBotService
                 var toAccResult = await _db.GetAccountByAccNumberAsync(toAccNumber);
                 if (!toAccResult.IsSuccess)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"❌ Счет не найден: {toAccNumber}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"❌ Счет не найден: {toAccNumber}",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
                 if (toAccResult.Data.Blocked)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Счет получателя заблокирован",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Счет получателя заблокирован",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
@@ -874,19 +922,21 @@ public class BankBotService
                 state.TransferState = TransferState.Amount;
 
                 var fromAccInfo = await _db.GetAccountByAccNumberAsync(state.FromAccount);
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    $"✅ Счет получателя найден\n\n" +
-                    $"📤 От: {fromAccInfo.Data.Name} ({state.FromAccount})\n" +
-                    $"📥 Кому: {toAccResult.Data.Name} ({toAccNumber})\n\n" +
-                    $"Введите сумму перевода:",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: $"✅ Счет получателя найден\n\n" +
+                          $"📤 От: {fromAccInfo.Data.Name} ({state.FromAccount})\n" +
+                          $"📥 Кому: {toAccResult.Data.Name} ({toAccNumber})\n\n" +
+                          $"Введите сумму перевода:",
                     replyMarkup: KeyboardManager.CancelAction());
                 break;
 
             case TransferState.Amount:
                 if (!decimal.TryParse(message.Text, out decimal amount) || amount <= 0)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Введите корректную положительную сумму",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Введите корректную положительную сумму",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
@@ -894,17 +944,19 @@ public class BankBotService
                 var transferResult = await _moneyService.TransferAsync(state.FromAccount!, state.ToAccount!, amount);
                 if (transferResult.IsSuccess)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"✅ Перевод выполнен успешно!\n\n📤 От: {state.FromAccount}\n📥 Кому: {state.ToAccount}\n💵 Сумма: {amount}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"✅ Перевод выполнен успешно!\n\n📤 От: {state.FromAccount}\n📥 Кому: {state.ToAccount}\n💵 Сумма: {amount}",
                         replyMarkup: KeyboardManager.MainMenu(message.From!.Id));
                 }
                 else if (transferResult.Code == ErrorCode.PendingTransfer)
                 {
                     dynamic info = transferResult.Data!;
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"⏳ Перевод отправлен в ожидание!\n\n" +
-                        $"📤 От: {state.FromAccount}\n📥 Кому: {state.ToAccount}\n💵 Сумма: {amount}\n" +
-                        $"⏱️ Задержка: {info.delay_hours} часов\n📝 Причина: {info.reason}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"⏳ Перевод отправлен в ожидание!\n\n" +
+                              $"📤 От: {state.FromAccount}\n📥 Кому: {state.ToAccount}\n💵 Сумма: {amount}\n" +
+                              $"⏱️ Задержка: {info.delay_hours} часов\n📝 Причина: {info.reason}",
                         replyMarkup: KeyboardManager.MainMenu(message.From!.Id));
                 }
                 else
@@ -917,7 +969,9 @@ public class BankBotService
                         ErrorCode.BadAmount => "❌ Некорректная сумма",
                         _ => $"❌ Ошибка: {transferResult.ErrorMessage}"
                     };
-                    await _botClient.SendTextMessageAsync(message.Chat.Id, errorMsg,
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: errorMsg,
                         replyMarkup: KeyboardManager.MainMenu(message.From!.Id));
                 }
                 state.Clear();
@@ -930,8 +984,9 @@ public class BankBotService
         string name = message.Text!.Trim();
         if (string.IsNullOrEmpty(name) || name.Length > 50)
         {
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                "❌ Некорректное название. Должно быть от 1 до 50 символов.",
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: "❌ Некорректное название. Должно быть от 1 до 50 символов.",
                 replyMarkup: KeyboardManager.CancelAction());
             return;
         }
@@ -939,14 +994,19 @@ public class BankBotService
         var result = await _moneyService.CreateAccountAsync(message.From!.Id, name);
         if (result.IsSuccess)
         {
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                $"✅ Счет создан успешно!\n\n🏷️ Название: {name}\n📟 Номер: {result.Data}",
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: $"✅ Счет создан успешно!\n\n🏷️ Название: {name}\n📟 Номер: {result.Data}",
                 replyMarkup: KeyboardManager.MainMenu(message.From.Id));
         }
         else
         {
-            string error = result.Code == ErrorCode.Blocked ? "❌ Вы заблокированы и не можете создавать счета" : $"❌ Ошибка: {result.ErrorMessage}";
-            await _botClient.SendTextMessageAsync(message.Chat.Id, error,
+            string error = result.Code == ErrorCode.Blocked
+                ? "❌ Вы заблокированы и не можете создавать счета"
+                : $"❌ Ошибка: {result.ErrorMessage}";
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: error,
                 replyMarkup: KeyboardManager.MainMenu(message.From.Id));
         }
         state.Clear();
@@ -958,8 +1018,9 @@ public class BankBotService
         {
             if (!long.TryParse(message.Text, out long userId))
             {
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    "❌ Неверный формат ID. Введите числовой ID:",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "❌ Неверный формат ID. Введите числовой ID:",
                     replyMarkup: KeyboardManager.CancelAction());
                 return;
             }
@@ -967,8 +1028,9 @@ public class BankBotService
             var userResult = await _db.GetUserAsync(userId);
             if (!userResult.IsSuccess)
             {
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    $"❌ Пользователь с ID {userId} не найден",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: $"❌ Пользователь с ID {userId} не найден",
                     replyMarkup: KeyboardManager.CancelAction());
                 return;
             }
@@ -977,15 +1039,16 @@ public class BankBotService
             state.AdminBlockUserState = AdminBlockUserState.Confirm;
 
             string action = state.Action == "unblock" ? "разблокировку" : "блокировку";
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                $"⚠️ <b>Подтвердите {action} пользователя</b>\n\n" +
-                $"👤 Пользователь: {userResult.Data.Username ?? "Без имени"}\n" +
-                $"🆔 ID: {userId}\n" +
-                $"📅 Создан: {userResult.Data.CreatedAt}\n" +
-                $"📊 Статус: {(userResult.Data.Blocked ? "🔴 Заблокирован" : "🟢 Активен")}\n\n" +
-                (state.Action == "unblock"
-                    ? "<b>Разблокировка разблокирует все счета пользователя!</b>"
-                    : "<b>Блокировка заблокирует все счета пользователя и запретит создание новых!</b>"),
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: $"⚠️ <b>Подтвердите {action} пользователя</b>\n\n" +
+                      $"👤 Пользователь: {userResult.Data.Username ?? "Без имени"}\n" +
+                      $"🆔 ID: {userId}\n" +
+                      $"📅 Создан: {userResult.Data.CreatedAt}\n" +
+                      $"📊 Статус: {(userResult.Data.Blocked ? "🔴 Заблокирован" : "🟢 Активен")}\n\n" +
+                      (state.Action == "unblock"
+                          ? "<b>Разблокировка разблокирует все счета пользователя!</b>"
+                          : "<b>Блокировка заблокирует все счета пользователя и запретит создание новых!</b>"),
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.YesNoKeyboard(state.Action == "unblock" ? "unblockuser" : "blockuser", userId.ToString()));
         }
@@ -998,8 +1061,9 @@ public class BankBotService
             string accNumber = message.Text!.Trim();
             if (!accNumber.StartsWith("ACC-"))
             {
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    "❌ Неверный формат счета. Используйте ACC-XXXX:",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "❌ Неверный формат счета. Используйте ACC-XXXX:",
                     replyMarkup: KeyboardManager.CancelAction());
                 return;
             }
@@ -1007,8 +1071,9 @@ public class BankBotService
             var accResult = await _db.GetAccountFullInfoAsync(accNumber);
             if (!accResult.IsSuccess)
             {
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    $"❌ Счет {accNumber} не найден",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: $"❌ Счет {accNumber} не найден",
                     replyMarkup: KeyboardManager.CancelAction());
                 return;
             }
@@ -1017,17 +1082,18 @@ public class BankBotService
             state.AdminBlockAccountState = AdminBlockAccountState.Confirm;
 
             string action = state.Action == "unblock" ? "разблокировку" : "блокировку";
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                $"⚠️ <b>Подтвердите {action} счета</b>\n\n" +
-                $"💳 Счет: {accResult.Data.Name}\n" +
-                $"📟 Номер: {accNumber}\n" +
-                $"👤 Владелец: {accResult.Data.Username}\n" +
-                $"🆔 ID владельца: {accResult.Data.UserId}\n" +
-                $"💰 Баланс: {accResult.Data.Balance:F2}\n" +
-                $"📊 Статус: {(accResult.Data.Blocked ? "🔴 Заблокирован" : "🟢 Активен")}\n\n" +
-                (state.Action == "unblock"
-                    ? "<b>Разблокировка разрешит операции со счетом!</b>"
-                    : "<b>Блокировка запретит любые операции со счетом!</b>"),
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: $"⚠️ <b>Подтвердите {action} счета</b>\n\n" +
+                      $"💳 Счет: {accResult.Data.Name}\n" +
+                      $"📟 Номер: {accNumber}\n" +
+                      $"👤 Владелец: {accResult.Data.Username}\n" +
+                      $"🆔 ID владельца: {accResult.Data.UserId}\n" +
+                      $"💰 Баланс: {accResult.Data.Balance:F2}\n" +
+                      $"📊 Статус: {(accResult.Data.Blocked ? "🔴 Заблокирован" : "🟢 Активен")}\n\n" +
+                      (state.Action == "unblock"
+                          ? "<b>Разблокировка разрешит операции со счетом!</b>"
+                          : "<b>Блокировка запретит любые операции со счетом!</b>"),
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.YesNoKeyboard(state.Action == "unblock" ? "unblockaccount" : "blockaccount", accNumber));
         }
@@ -1040,8 +1106,9 @@ public class BankBotService
             string accNumber = message.Text!.Trim();
             if (!accNumber.StartsWith("ACC-"))
             {
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    "❌ Неверный формат счета. Используйте ACC-XXXX:",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "❌ Неверный формат счета. Используйте ACC-XXXX:",
                     replyMarkup: KeyboardManager.CancelAction());
                 return;
             }
@@ -1049,8 +1116,9 @@ public class BankBotService
             var accResult = await _db.GetAccountFullInfoAsync(accNumber);
             if (!accResult.IsSuccess)
             {
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    $"❌ Счет {accNumber} не найден",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: $"❌ Счет {accNumber} не найден",
                     replyMarkup: KeyboardManager.CancelAction());
                 return;
             }
@@ -1058,18 +1126,19 @@ public class BankBotService
             state.AccountNumber = accNumber;
             state.AdminDeleteAccountState = AdminDeleteAccountState.Confirm;
 
-            await _botClient.SendTextMessageAsync(message.Chat.Id,
-                $"⚠️ <b>⚠️ ВНИМАНИЕ: УДАЛЕНИЕ СЧЕТА ⚠️</b>\n\n" +
-                $"💳 Счет: {accResult.Data.Name}\n" +
-                $"📟 Номер: {accNumber}\n" +
-                $"👤 Владелец: {accResult.Data.Username}\n" +
-                $"🆔 ID владельца: {accResult.Data.UserId}\n" +
-                $"💰 Баланс: {accResult.Data.Balance:F2}\n" +
-                $"⏳ В удержании: {accResult.Data.Pending:F2}\n" +
-                $"📊 Статус: {(accResult.Data.Blocked ? "🔴 Заблокирован" : "🟢 Активен")}\n\n" +
-                "<b>❗ Это действие необратимо! Все средства на счете будут потеряны!</b>\n" +
-                "<b>❗ Все pending транзакции будут удалены!</b>\n" +
-                "<b>❗ Подтвердите удаление:</b>",
+            await _botClient.SendMessage(
+                chatId: message.Chat.Id,
+                text: $"⚠️ <b>⚠️ ВНИМАНИЕ: УДАЛЕНИЕ СЧЕТА ⚠️</b>\n\n" +
+                      $"💳 Счет: {accResult.Data.Name}\n" +
+                      $"📟 Номер: {accNumber}\n" +
+                      $"👤 Владелец: {accResult.Data.Username}\n" +
+                      $"🆔 ID владельца: {accResult.Data.UserId}\n" +
+                      $"💰 Баланс: {accResult.Data.Balance:F2}\n" +
+                      $"⏳ В удержании: {accResult.Data.Pending:F2}\n" +
+                      $"📊 Статус: {(accResult.Data.Blocked ? "🔴 Заблокирован" : "🟢 Активен")}\n\n" +
+                      "<b>❗ Это действие необратимо! Все средства на счете будут потеряны!</b>\n" +
+                      "<b>❗ Все pending транзакции будут удалены!</b>\n" +
+                      "<b>❗ Подтвердите удаление:</b>",
                 parseMode: ParseMode.Html,
                 replyMarkup: KeyboardManager.YesNoKeyboard("deleteaccount", accNumber));
         }
@@ -1083,8 +1152,9 @@ public class BankBotService
                 string accNumber = message.Text!.Trim();
                 if (!accNumber.StartsWith("ACC-"))
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Неверный формат счета. Используйте ACC-XXXX:",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Неверный формат счета. Используйте ACC-XXXX:",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
@@ -1092,8 +1162,9 @@ public class BankBotService
                 var accResult = await _db.GetAccountFullInfoAsync(accNumber);
                 if (!accResult.IsSuccess)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"❌ Счет {accNumber} не найден",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"❌ Счет {accNumber} не найден",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
@@ -1101,13 +1172,14 @@ public class BankBotService
                 state.AccountNumber = accNumber;
                 state.AdminUpdateBalanceState = AdminUpdateBalanceState.Amount;
 
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    $"💰 <b>Изменение баланса счета</b>\n\n" +
-                    $"💳 Счет: {accResult.Data.Name}\n" +
-                    $"📟 Номер: {accNumber}\n" +
-                    $"👤 Владелец: {accResult.Data.Username}\n" +
-                    $"💰 Текущий баланс: {accResult.Data.Balance:F2}\n\n" +
-                    $"Введите новый баланс:",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: $"💰 <b>Изменение баланса счета</b>\n\n" +
+                          $"💳 Счет: {accResult.Data.Name}\n" +
+                          $"📟 Номер: {accNumber}\n" +
+                          $"👤 Владелец: {accResult.Data.Username}\n" +
+                          $"💰 Текущий баланс: {accResult.Data.Balance:F2}\n\n" +
+                          $"Введите новый баланс:",
                     parseMode: ParseMode.Html,
                     replyMarkup: KeyboardManager.CancelAction());
                 break;
@@ -1115,8 +1187,9 @@ public class BankBotService
             case AdminUpdateBalanceState.Amount:
                 if (!decimal.TryParse(message.Text, out decimal newBalance))
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Введите корректную сумму:",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Введите корректную сумму:",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
@@ -1124,14 +1197,16 @@ public class BankBotService
                 var updateResult = await _db.UpdateAccountBalanceAsync(state.AccountNumber!, newBalance);
                 if (updateResult.IsSuccess)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"✅ Баланс счета {state.AccountNumber} изменен на {newBalance:F2}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"✅ Баланс счета {state.AccountNumber} изменен на {newBalance:F2}",
                         replyMarkup: KeyboardManager.BackToAdmin());
                 }
                 else
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"❌ Ошибка: {updateResult.ErrorMessage}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"❌ Ошибка: {updateResult.ErrorMessage}",
                         replyMarkup: KeyboardManager.BackToAdmin());
                 }
                 state.Clear();
@@ -1147,16 +1222,18 @@ public class BankBotService
                 string targetAcc = message.Text!.Trim();
                 if (!string.IsNullOrEmpty(targetAcc) && !targetAcc.StartsWith("ACC-"))
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Неверный формат счета. Используйте ACC-XXXX или оставьте пустым:",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Неверный формат счета. Используйте ACC-XXXX или оставьте пустым:",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
                 state.TargetAccount = string.IsNullOrEmpty(targetAcc) ? null : targetAcc;
                 state.AdminAddPendingState = AdminAddPendingState.DelayHours;
                 string targetText = state.TargetAccount == null ? "для всех счетов" : $"для счета {state.TargetAccount}";
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    $"⏳ <b>Добавление правила pending {targetText}</b>\n\nВведите время задержки в часах:",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: $"⏳ <b>Добавление правила pending {targetText}</b>\n\nВведите время задержки в часах:",
                     parseMode: ParseMode.Html,
                     replyMarkup: KeyboardManager.CancelAction());
                 break;
@@ -1164,15 +1241,17 @@ public class BankBotService
             case AdminAddPendingState.DelayHours:
                 if (!int.TryParse(message.Text, out int delayHours) || delayHours <= 0)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Введите корректное количество часов (целое число > 0):",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Введите корректное количество часов (целое число > 0):",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
                 state.DelayHours = delayHours;
                 state.AdminAddPendingState = AdminAddPendingState.Reason;
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    "📝 Введите причину задержки:",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "📝 Введите причину задержки:",
                     replyMarkup: KeyboardManager.CancelAction());
                 break;
 
@@ -1182,14 +1261,16 @@ public class BankBotService
                 if (ruleResult.IsSuccess)
                 {
                     string targetMsg = state.TargetAccount == null ? "для всех счетов" : $"для счета {state.TargetAccount}";
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"✅ Правило pending добавлено!\n\n🎯 Цель: {targetMsg}\n⏱️ Задержка: {state.DelayHours} часов\n📝 Причина: {reason}\n🆔 ID правила: {ruleResult.Data}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"✅ Правило pending добавлено!\n\n🎯 Цель: {targetMsg}\n⏱️ Задержка: {state.DelayHours} часов\n📝 Причина: {reason}\n🆔 ID правила: {ruleResult.Data}",
                         replyMarkup: KeyboardManager.BackToAdmin());
                 }
                 else
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"❌ Ошибка: {ruleResult.ErrorMessage}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"❌ Ошибка: {ruleResult.ErrorMessage}",
                         replyMarkup: KeyboardManager.BackToAdmin());
                 }
                 state.Clear();
@@ -1204,15 +1285,17 @@ public class BankBotService
             case AdminGlobalPendingState.DelayHours:
                 if (!int.TryParse(message.Text, out int delayHours) || delayHours <= 0)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        "❌ Введите корректное количество часов (целое число > 0):",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: "❌ Введите корректное количество часов (целое число > 0):",
                         replyMarkup: KeyboardManager.CancelAction());
                     return;
                 }
                 state.DelayHours = delayHours;
                 state.AdminGlobalPendingState = AdminGlobalPendingState.Reason;
-                await _botClient.SendTextMessageAsync(message.Chat.Id,
-                    "📝 Введите причину задержки:",
+                await _botClient.SendMessage(
+                    chatId: message.Chat.Id,
+                    text: "📝 Введите причину задержки:",
                     replyMarkup: KeyboardManager.CancelAction());
                 break;
 
@@ -1221,14 +1304,16 @@ public class BankBotService
                 var ruleResult = await _db.AddGlobalPendingRuleAsync(null, state.DelayHours, reason, message.From!.Id);
                 if (ruleResult.IsSuccess)
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"✅ Глобальное правило pending добавлено!\n\n🎯 Цель: Все счета\n⏱️ Задержка: {state.DelayHours} часов\n📝 Причина: {reason}\n🆔 ID правила: {ruleResult.Data}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"✅ Глобальное правило pending добавлено!\n\n🎯 Цель: Все счета\n⏱️ Задержка: {state.DelayHours} часов\n📝 Причина: {reason}\n🆔 ID правила: {ruleResult.Data}",
                         replyMarkup: KeyboardManager.BackToAdmin());
                 }
                 else
                 {
-                    await _botClient.SendTextMessageAsync(message.Chat.Id,
-                        $"❌ Ошибка: {ruleResult.ErrorMessage}",
+                    await _botClient.SendMessage(
+                        chatId: message.Chat.Id,
+                        text: $"❌ Ошибка: {ruleResult.ErrorMessage}",
                         replyMarkup: KeyboardManager.BackToAdmin());
                 }
                 state.Clear();
@@ -1268,11 +1353,20 @@ public class BankBotService
 
         if (editMessageId.HasValue)
         {
-            await _botClient.EditMessageTextAsync(chatId, editMessageId.Value, text, parseMode: ParseMode.Html, replyMarkup: keyboard);
+            await _botClient.EditMessageText(
+                chatId: chatId,
+                messageId: editMessageId.Value,
+                text: text,
+                parseMode: ParseMode.Html,
+                replyMarkup: keyboard);
         }
         else
         {
-            await _botClient.SendTextMessageAsync(chatId, text, parseMode: ParseMode.Html, replyMarkup: keyboard);
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: text,
+                parseMode: ParseMode.Html,
+                replyMarkup: keyboard);
         }
     }
 }
