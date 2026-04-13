@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BankTgBot")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+73aabd234fd3f86c0736ea5f8db6d542ed2a1972")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+524d4863e5661c95e0440123f04d1077a9d5b9d7")]
 [assembly: System.Reflection.AssemblyProductAttribute("BankTgBot")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BankTgBot")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

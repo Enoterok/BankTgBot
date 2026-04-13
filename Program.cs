@@ -1,7 +1,9 @@
-﻿using System;
+﻿using BankBot;
+using BankBot.Core;
+using BankBot.Storage;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
-using BankBot;
 
 class Program
 {
@@ -15,25 +17,32 @@ class Program
             return;
         }
 
-        var botService = new BankBotService(AppConfig.Bot.Token, AppConfig.Bot.Proxy);
-        using var cts = new CancellationTokenSource();
+        var db = new DatabaseService();
+        var money = new MoneyService(db);
 
-        Console.CancelKeyPress += (sender, e) =>
+        // Инициализация БД
+        var initResult = await db.InitDbAsync();
+        if (!initResult.IsSuccess)
         {
-            e.Cancel = true;
-            cts.Cancel();
-        };
-
-        await botService.StartAsync(cts.Token);
-
-        try
-        {
-            await Task.Delay(-1, cts.Token);
+            Console.WriteLine($"DB init error: {initResult.ErrorMessage}");
+            return;
         }
-        catch (TaskCanceledException) { }
-        finally
+
+        bool consoleMode = args.Contains("--nogui") || args.Contains("-ng");
+
+        if (!consoleMode)
         {
-            Console.WriteLine("Бот остановлен.");
+            var console = new ConsoleInterface(db, money);
+            await console.RunAsync();
+        }
+        else
+        {
+            var botService = new BankBotService(AppConfig.Bot.Token, AppConfig.Bot.Proxy);
+            using var cts = new CancellationTokenSource();
+            Console.CancelKeyPress += (s, e) => { e.Cancel = true; cts.Cancel(); };
+            await botService.StartAsync(cts.Token);
+            // Ожидаем завершения
+            try { await Task.Delay(-1, cts.Token); } catch (TaskCanceledException) { }
         }
     }
 }

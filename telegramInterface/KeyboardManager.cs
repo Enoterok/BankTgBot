@@ -9,16 +9,16 @@ public static class KeyboardManager
     {
         var buttons = new List<InlineKeyboardButton[]>
         {
-            new[] { InlineKeyboardButton.WithCallbackData("💰 Баланс", "balance") },
-            new[] { InlineKeyboardButton.WithCallbackData("💸 Перевод", "transfer") },
-            new[] { InlineKeyboardButton.WithCallbackData("➕ Новый счет", "create_account") },
-            new[] { InlineKeyboardButton.WithCallbackData("📊 Мои счета", "my_accounts") },
-            new[] { InlineKeyboardButton.WithCallbackData("📝 История", "history") }
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.Balance, "balance") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.Transfer, "transfer") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.NewAccount, "create_account") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.MyAccounts, "my_accounts") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.History, "history") }
         };
 
         if (userId.HasValue && AppConfig.Bot.AdminIds.Contains(userId.Value))
         {
-            buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("👑 Админ-панель", "admin_panel") });
+            buttons.Add(new[] { InlineKeyboardButton.WithCallbackData(Messages.AdminPanel, "admin_panel") });
         }
 
         return new InlineKeyboardMarkup(buttons);
@@ -28,35 +28,35 @@ public static class KeyboardManager
     {
         return new InlineKeyboardMarkup(new[]
         {
-            new[] { InlineKeyboardButton.WithCallbackData("👥 Все пользователи", "admin_users") },
-            new[] { InlineKeyboardButton.WithCallbackData("💳 Все счета", "admin_accounts") },
-            new[] { InlineKeyboardButton.WithCallbackData("🔒 Блокировка пользователя", "admin_block_user") },
-            new[] { InlineKeyboardButton.WithCallbackData("🔓 Разблокировка пользователя", "admin_unblock_user") },
-            new[] { InlineKeyboardButton.WithCallbackData("⛔ Блокировка счета", "admin_block_account") },
-            new[] { InlineKeyboardButton.WithCallbackData("✅ Разблокировка счета", "admin_unblock_account") },
-            new[] { InlineKeyboardButton.WithCallbackData("🗑️ Удаление счета", "admin_delete_account") },
-            new[] { InlineKeyboardButton.WithCallbackData("💰 Изменить баланс", "admin_update_balance") },
-            new[] { InlineKeyboardButton.WithCallbackData("⏳ Добавить pending правило", "admin_add_pending") },
-            new[] { InlineKeyboardButton.WithCallbackData("🌍 Глобальное pending правило", "admin_global_pending") },
-            new[] { InlineKeyboardButton.WithCallbackData("📋 Список pending правил", "admin_pending_list") },
-            new[] { InlineKeyboardButton.WithCallbackData("📊 Pending транзакции", "admin_pending_transactions") },
-            new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад в меню", "menu") }
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.AllUsers, "admin_users") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.AllAccounts, "admin_accounts") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.BlockUser, "admin_block_user") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.UnblockUser, "admin_unblock_user") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.BlockAccount, "admin_block_account") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.UnblockAccount, "admin_unblock_account") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.DeleteAccount, "admin_delete_account") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.UpdateBalance, "admin_update_balance") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.AddPendingRule, "admin_add_pending") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.GlobalPendingRule, "admin_global_pending") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.PendingRulesList, "admin_pending_list") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.PendingTransactions, "admin_pending_transactions") },
+            new[] { InlineKeyboardButton.WithCallbackData(Messages.BackToMenu, "menu") }
         });
     }
 
     public static InlineKeyboardMarkup BackToMenu()
     {
-        return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("⬅️ Назад в меню", "menu"));
+        return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(Messages.BackToMenu, "menu"));
     }
 
     public static InlineKeyboardMarkup BackToAdmin()
     {
-        return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("⬅️ Назад в админ-панель", "admin_panel"));
+        return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(Messages.BackToAdmin, "admin_panel"));
     }
 
     public static InlineKeyboardMarkup CancelAction()
     {
-        return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("❌ Отмена", "cancel"));
+        return new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData(Messages.Cancel, "cancel"));
     }
 
     public static InlineKeyboardMarkup AccountSelection(List<Account> accounts, string prefix = "select_acc")
@@ -67,7 +67,7 @@ public static class KeyboardManager
                 $"{prefix}_{acc.AccNumber}") }
         ).ToList();
 
-        buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("⬅️ Назад", "menu") });
+        buttons.Add(new[] { InlineKeyboardButton.WithCallbackData(Messages.Back, "menu") });
         return new InlineKeyboardMarkup(buttons);
     }
 
@@ -79,7 +79,7 @@ public static class KeyboardManager
                 $"transfer_from_{acc.AccNumber}") }
         ).ToList();
 
-        buttons.Add(new[] { InlineKeyboardButton.WithCallbackData("❌ Отмена", "cancel") });
+        buttons.Add(new[] { InlineKeyboardButton.WithCallbackData(Messages.Cancel, "cancel") });
         return new InlineKeyboardMarkup(buttons);
     }
 
@@ -89,8 +89,8 @@ public static class KeyboardManager
         {
             new[]
             {
-                InlineKeyboardButton.WithCallbackData("✅ Да", $"confirm_{action}_{data}"),
-                InlineKeyboardButton.WithCallbackData("❌ Нет", "cancel")
+                InlineKeyboardButton.WithCallbackData(Messages.Yes, $"confirm_{action}_{data}"),
+                InlineKeyboardButton.WithCallbackData(Messages.No, "cancel")
             }
         });
     }
