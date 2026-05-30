@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 class Program
 {
+    enum ActionType { ConsoleOnly, NoGui, Gui, Error }
     static async Task Main(string[] args)
     {
         AppConfig.Initialize("cs-config.json");
@@ -14,13 +15,11 @@ class Program
         if (string.IsNullOrEmpty(AppConfig.Bot.Token))
         {
             Console.WriteLine("Critical error: TOKEN is not found in cs-config.json!");
-            return;
         }
 
         var db = new DatabaseService();
         var money = new MoneyService(db);
 
-        // Инициализация БД
         var initResult = await db.InitDbAsync();
         if (!initResult.IsSuccess)
         {
@@ -28,21 +27,55 @@ class Program
             return;
         }
 
-        bool consoleMode = args.Contains("--nogui") || args.Contains("-ng");
+        bool noGuiMode = args.Contains("--nogui") || args.Contains("-ng");
+        bool consoleOnlyMode = args.Contains("--consoleonly") || args.Contains("-c");
 
-        if (!consoleMode)
+        ActionType mode = (consoleOnlyMode, noGuiMode) switch
         {
-            var console = new ConsoleInterface(db, money);
-            await console.RunAsync();
-        }
-        else
+            (true, false) => ActionType.ConsoleOnly,
+            (false, true) => ActionType.NoGui,
+            (true, true) => ActionType.Error,
+            _ => ActionType.Gui
+        };
+
+        switch (mode)
         {
-            var botService = new BankBotService(AppConfig.Bot.Token, AppConfig.Bot.Proxy);
-            using var cts = new CancellationTokenSource();
-            Console.CancelKeyPress += (s, e) => { e.Cancel = true; cts.Cancel(); };
-            await botService.StartAsync(cts.Token);
-            // Ожидаем завершения
-            try { await Task.Delay(-1, cts.Token); } catch (TaskCanceledException) { }
+            case ActionType.ConsoleOnly:
+                {
+                    var console = new ConsoleInterface(db, money);
+                    await console.RunAsync();
+                    break;
+                }
+
+            case ActionType.NoGui:
+                {
+                    var botService = new BankBotService(AppConfig.Bot.Token, AppConfig.Bot.Proxy);
+                    using var cts = new CancellationTokenSource();
+                    Console.CancelKeyPress += (s, e) => { e.Cancel = true; cts.Cancel(); };
+                    await botService.StartAsync(cts.Token);
+                    try { await Task.Delay(-1, cts.Token); } catch (TaskCanceledException) { }
+                    break;
+                }
+
+            case ActionType.Gui:
+                {
+                    var botService = new BankBotService(AppConfig.Bot.Token, AppConfig.Bot.Proxy);
+                    using var cts = new CancellationTokenSource();
+                    var console = new ConsoleInterface(db, money);
+                    Console.CancelKeyPress += (s, e) => { e.Cancel = true; cts.Cancel(); };
+
+                    Task botTask = botService.StartAsync(cts.Token);
+                    await console.RunAsync();
+                    cts.Cancel();
+
+                    try { await botTask; } catch (Exception) { }
+                    break;
+                }
+
+
+            case ActionType.Error:
+                Console.WriteLine("Error, using invalid launch modifiers");
+                break;
         }
     }
 }
