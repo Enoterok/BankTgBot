@@ -17,6 +17,7 @@ data/
 # Кэш
 __pycache__/
 bin/
+obj/
 *.pyc
 *.pyo
 *.pyd
